@@ -36,7 +36,6 @@ def create_tables():
     connection = get_connection()
     cursor = connection.cursor()
 
-    # Owners table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS owners (
             owner_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +46,6 @@ def create_tables():
         )
     """)
 
-    # Animals table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS animals (
             animal_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,7 +61,6 @@ def create_tables():
         )
     """)
 
-    # Visits table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS visits (
             visit_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +74,6 @@ def create_tables():
         )
     """)
 
-    # Vaccinations table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS vaccinations (
             vaccination_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,7 +86,6 @@ def create_tables():
         )
     """)
 
-    # Medications table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS medications (
             medication_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,7 +94,6 @@ def create_tables():
         )
     """)
 
-    # Medication history table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS animal_medications (
             animal_medication_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -207,30 +201,11 @@ if page == "Dashboard":
 
     col1, col2, col3, col4, col5 = st.columns(5)
 
-    col1.metric(
-        "👤 Owners",
-        len(owners)
-    )
-
-    col2.metric(
-        "🐾 Animals",
-        len(animals)
-    )
-
-    col3.metric(
-        "🩺 Visits",
-        len(visits)
-    )
-
-    col4.metric(
-        "💉 Vaccinations",
-        len(vaccinations)
-    )
-
-    col5.metric(
-        "💊 Medications",
-        len(medications)
-    )
+    col1.metric("👤 Owners", len(owners))
+    col2.metric("🐾 Animals", len(animals))
+    col3.metric("🩺 Visits", len(visits))
+    col4.metric("💉 Vaccinations", len(vaccinations))
+    col5.metric("💊 Medications", len(medications))
 
     st.divider()
 
@@ -254,9 +229,7 @@ if page == "Dashboard":
 
     if recent_animals.empty:
 
-        st.info(
-            "No animals have been added yet."
-        )
+        st.info("No animals have been added yet.")
 
     else:
 
@@ -274,37 +247,24 @@ elif page == "Owners":
 
     st.title("👤 Owner Management")
 
+    # ---------------- ADD OWNER ----------------
+
     st.subheader("➕ Add New Owner")
 
     with st.form("owner_form"):
 
-        owner_name = st.text_input(
-            "Owner Name"
-        )
+        owner_name = st.text_input("Owner Name")
+        phone = st.text_input("Phone")
+        email = st.text_input("Email")
+        address = st.text_area("Address")
 
-        phone = st.text_input(
-            "Phone"
-        )
-
-        email = st.text_input(
-            "Email"
-        )
-
-        address = st.text_area(
-            "Address"
-        )
-
-        submit = st.form_submit_button(
-            "Add Owner"
-        )
+        submit = st.form_submit_button("Add Owner")
 
         if submit:
 
             if owner_name.strip() == "":
 
-                st.error(
-                    "Owner name is required."
-                )
+                st.error("Owner name is required.")
 
             else:
 
@@ -337,6 +297,8 @@ elif page == "Owners":
                     "✅ Owner added successfully!"
                 )
 
+    # ---------------- SHOW OWNERS ----------------
+
     st.divider()
 
     st.subheader("📋 Owner Records")
@@ -354,9 +316,7 @@ elif page == "Owners":
 
     if owners.empty:
 
-        st.info(
-            "No owner records found."
-        )
+        st.info("No owner records found.")
 
     else:
 
@@ -364,6 +324,111 @@ elif page == "Owners":
             owners,
             use_container_width=True
         )
+
+        # ---------------- DELETE OWNER ----------------
+
+        st.divider()
+
+        st.subheader("🗑️ Delete Owner")
+
+        owner_options = {
+            f"{row.owner_name} (ID: {row.owner_id})":
+            row.owner_id
+            for row in owners.itertuples()
+        }
+
+        selected_owner = st.selectbox(
+            "Select Owner to Delete",
+            list(owner_options.keys())
+        )
+
+        confirm_owner = st.checkbox(
+            "I confirm that I want to delete this owner and related records."
+        )
+
+        if st.button("🗑️ Delete Owner"):
+
+            if not confirm_owner:
+
+                st.warning(
+                    "Please confirm deletion first."
+                )
+
+            else:
+
+                owner_id = owner_options[selected_owner]
+
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                # Find animals belonging to owner
+                cursor.execute(
+                    """
+                    SELECT animal_id
+                    FROM animals
+                    WHERE owner_id = ?
+                    """,
+                    (owner_id,)
+                )
+
+                animal_ids = [
+                    row[0]
+                    for row in cursor.fetchall()
+                ]
+
+                # Delete related records
+                for animal_id in animal_ids:
+
+                    cursor.execute(
+                        """
+                        DELETE FROM animal_medications
+                        WHERE animal_id = ?
+                        """,
+                        (animal_id,)
+                    )
+
+                    cursor.execute(
+                        """
+                        DELETE FROM vaccinations
+                        WHERE animal_id = ?
+                        """,
+                        (animal_id,)
+                    )
+
+                    cursor.execute(
+                        """
+                        DELETE FROM visits
+                        WHERE animal_id = ?
+                        """,
+                        (animal_id,)
+                    )
+
+                # Delete animals
+                cursor.execute(
+                    """
+                    DELETE FROM animals
+                    WHERE owner_id = ?
+                    """,
+                    (owner_id,)
+                )
+
+                # Delete owner
+                cursor.execute(
+                    """
+                    DELETE FROM owners
+                    WHERE owner_id = ?
+                    """,
+                    (owner_id,)
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Owner and related records deleted."
+                )
+
+                st.rerun()
 
 
 # ============================================================
@@ -398,9 +463,7 @@ elif page == "Animals":
 
         with st.form("animal_form"):
 
-            animal_name = st.text_input(
-                "Animal Name"
-            )
+            animal_name = st.text_input("Animal Name")
 
             species = st.selectbox(
                 "Species",
@@ -415,9 +478,7 @@ elif page == "Animals":
                 ]
             )
 
-            breed = st.text_input(
-                "Breed"
-            )
+            breed = st.text_input("Breed")
 
             gender = st.selectbox(
                 "Gender",
@@ -518,9 +579,7 @@ elif page == "Animals":
 
     if animals.empty:
 
-        st.info(
-            "No animal records found."
-        )
+        st.info("No animal records found.")
 
     else:
 
@@ -528,6 +587,85 @@ elif page == "Animals":
             animals,
             use_container_width=True
         )
+
+        # ---------------- DELETE ANIMAL ----------------
+
+        st.divider()
+
+        st.subheader("🗑️ Delete Animal")
+
+        animal_options = {
+            f"{row.animal_name} (ID: {row.animal_id})":
+            row.animal_id
+            for row in animals.itertuples()
+        }
+
+        selected_animal = st.selectbox(
+            "Select Animal to Delete",
+            list(animal_options.keys())
+        )
+
+        confirm_animal = st.checkbox(
+            "I confirm that I want to delete this animal and related records."
+        )
+
+        if st.button("🗑️ Delete Animal"):
+
+            if not confirm_animal:
+
+                st.warning(
+                    "Please confirm deletion first."
+                )
+
+            else:
+
+                animal_id = animal_options[
+                    selected_animal
+                ]
+
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    DELETE FROM animal_medications
+                    WHERE animal_id = ?
+                    """,
+                    (animal_id,)
+                )
+
+                cursor.execute(
+                    """
+                    DELETE FROM vaccinations
+                    WHERE animal_id = ?
+                    """,
+                    (animal_id,)
+                )
+
+                cursor.execute(
+                    """
+                    DELETE FROM visits
+                    WHERE animal_id = ?
+                    """,
+                    (animal_id,)
+                )
+
+                cursor.execute(
+                    """
+                    DELETE FROM animals
+                    WHERE animal_id = ?
+                    """,
+                    (animal_id,)
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Animal and related records deleted."
+                )
+
+                st.rerun()
 
 
 # ============================================================
@@ -655,6 +793,62 @@ elif page == "Visits":
             visits,
             use_container_width=True
         )
+
+        # ---------------- DELETE VISIT ----------------
+
+        st.divider()
+
+        st.subheader("🗑️ Delete Visit")
+
+        visit_options = {
+            f"{row.animal_name} - {row.visit_date} "
+            f"(ID: {row.visit_id})":
+            row.visit_id
+            for row in visits.itertuples()
+        }
+
+        selected_visit = st.selectbox(
+            "Select Visit to Delete",
+            list(visit_options.keys())
+        )
+
+        confirm_visit = st.checkbox(
+            "I confirm that I want to delete this visit."
+        )
+
+        if st.button("🗑️ Delete Visit"):
+
+            if not confirm_visit:
+
+                st.warning(
+                    "Please confirm deletion first."
+                )
+
+            else:
+
+                visit_id = visit_options[
+                    selected_visit
+                ]
+
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    DELETE FROM visits
+                    WHERE visit_id = ?
+                    """,
+                    (visit_id,)
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Visit deleted successfully."
+                )
+
+                st.rerun()
 
 
 # ============================================================
@@ -784,6 +978,65 @@ elif page == "Vaccinations":
             use_container_width=True
         )
 
+        # ---------------- DELETE VACCINATION ----------------
+
+        st.divider()
+
+        st.subheader("🗑️ Delete Vaccination")
+
+        vaccination_options = {
+            f"{row.animal_name} - "
+            f"{row.vaccine_name} "
+            f"(ID: {row.vaccination_id})":
+            row.vaccination_id
+            for row in vaccinations.itertuples()
+        }
+
+        selected_vaccination = st.selectbox(
+            "Select Vaccination to Delete",
+            list(vaccination_options.keys())
+        )
+
+        confirm_vaccination = st.checkbox(
+            "I confirm that I want to delete this vaccination."
+        )
+
+        if st.button(
+            "🗑️ Delete Vaccination"
+        ):
+
+            if not confirm_vaccination:
+
+                st.warning(
+                    "Please confirm deletion first."
+                )
+
+            else:
+
+                vaccination_id = vaccination_options[
+                    selected_vaccination
+                ]
+
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    DELETE FROM vaccinations
+                    WHERE vaccination_id = ?
+                    """,
+                    (vaccination_id,)
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Vaccination deleted successfully."
+                )
+
+                st.rerun()
+
 
 # ============================================================
 # MEDICATIONS
@@ -867,6 +1120,74 @@ elif page == "Medications":
             medications,
             use_container_width=True
         )
+
+        # ---------------- DELETE MEDICATION ----------------
+
+        st.divider()
+
+        st.subheader("🗑️ Delete Medication")
+
+        medication_options = {
+            f"{row.medication_name} "
+            f"(ID: {row.medication_id})":
+            row.medication_id
+            for row in medications.itertuples()
+        }
+
+        selected_medication = st.selectbox(
+            "Select Medication to Delete",
+            list(medication_options.keys())
+        )
+
+        confirm_medication = st.checkbox(
+            "I confirm that I want to delete this medication and its history."
+        )
+
+        if st.button(
+            "🗑️ Delete Medication"
+        ):
+
+            if not confirm_medication:
+
+                st.warning(
+                    "Please confirm deletion first."
+                )
+
+            else:
+
+                medication_id = medication_options[
+                    selected_medication
+                ]
+
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                # Delete medication history first
+                cursor.execute(
+                    """
+                    DELETE FROM animal_medications
+                    WHERE medication_id = ?
+                    """,
+                    (medication_id,)
+                )
+
+                # Delete medication
+                cursor.execute(
+                    """
+                    DELETE FROM medications
+                    WHERE medication_id = ?
+                    """,
+                    (medication_id,)
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Medication and related history deleted."
+                )
+
+                st.rerun()
 
 
 # ============================================================
@@ -1054,6 +1375,66 @@ elif page == "Medication History":
             use_container_width=True
         )
 
+        # ---------------- DELETE MEDICATION HISTORY ----------------
+
+        st.divider()
+
+        st.subheader("🗑️ Delete Medication History")
+
+        history_options = {
+            f"{row.animal_name} - "
+            f"{row.medication_name} - "
+            f"{row.start_date} "
+            f"(ID: {row.animal_medication_id})":
+            row.animal_medication_id
+            for row in history.itertuples()
+        }
+
+        selected_history = st.selectbox(
+            "Select Medication History to Delete",
+            list(history_options.keys())
+        )
+
+        confirm_history = st.checkbox(
+            "I confirm that I want to delete this medication history."
+        )
+
+        if st.button(
+            "🗑️ Delete Medication History"
+        ):
+
+            if not confirm_history:
+
+                st.warning(
+                    "Please confirm deletion first."
+                )
+
+            else:
+
+                history_id = history_options[
+                    selected_history
+                ]
+
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    DELETE FROM animal_medications
+                    WHERE animal_medication_id = ?
+                    """,
+                    (history_id,)
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Medication history deleted successfully."
+                )
+
+                st.rerun()
+
 
 # ============================================================
 # DOSE CALCULATOR
@@ -1081,9 +1462,7 @@ elif page == "Dose Calculator":
         step=0.1
     )
 
-    if st.button(
-        "Calculate Dose"
-    ):
+    if st.button("Calculate Dose"):
 
         if weight <= 0:
 
