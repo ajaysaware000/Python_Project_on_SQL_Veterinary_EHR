@@ -1,6 +1,8 @@
 import streamlit as st
+import sqlite3
 import pandas as pd
 import plotly.express as px
+from datetime import date
 
 
 # ============================================================
@@ -15,134 +17,143 @@ st.set_page_config(
 
 
 # ============================================================
-# SAMPLE DATA
+# DATABASE CONNECTION
 # ============================================================
 
-owners = pd.DataFrame({
-    "Owner ID": [1, 2, 3],
-    "Owner Name": ["Rahul Kumar", "Priya Sharma", "Amit Patil"],
-    "Phone": ["9876543210", "9876543211", "9876543212"],
-    "Email": [
-        "rahul@example.com",
-        "priya@example.com",
-        "amit@example.com"
-    ]
-})
+DATABASE_NAME = "veterinary_ehr.db"
 
 
-animals = pd.DataFrame({
-    "Animal ID": [1, 2, 3, 4],
-    "Animal Name": ["Bruno", "Kitty", "Rocky", "Coco"],
-    "Species": ["Dog", "Cat", "Dog", "Rabbit"],
-    "Breed": ["Labrador", "Persian", "Beagle", "Dutch Rabbit"],
-    "Gender": ["Male", "Female", "Male", "Female"],
-    "Weight (kg)": [25.5, 4.2, 12.5, 2.3],
-    "Owner": [
-        "Rahul Kumar",
-        "Priya Sharma",
-        "Amit Patil",
-        "Rahul Kumar"
-    ]
-})
-
-
-visits = pd.DataFrame({
-    "Visit ID": [1, 2, 3, 4],
-    "Animal": ["Bruno", "Kitty", "Rocky", "Coco"],
-    "Visit Date": [
-        "2026-10-01",
-        "2026-10-02",
-        "2026-10-03",
-        "2026-10-04"
-    ],
-    "Symptoms": [
-        "Fever",
-        "Cough",
-        "Loss of appetite",
-        "Skin irritation"
-    ],
-    "Diagnosis": [
-        "Infection",
-        "Respiratory issue",
-        "Digestive issue",
-        "Skin condition"
-    ]
-})
-
-
-vaccinations = pd.DataFrame({
-    "Vaccination ID": [1, 2, 3],
-    "Animal": ["Bruno", "Kitty", "Rocky"],
-    "Vaccine": ["Rabies", "FVRCP", "DHPP"],
-    "Vaccination Date": [
-        "2026-09-01",
-        "2026-08-15",
-        "2026-09-20"
-    ],
-    "Next Due Date": [
-        "2027-09-01",
-        "2027-08-15",
-        "2027-09-20"
-    ]
-})
-
-
-medications = pd.DataFrame({
-    "Medication ID": [1, 2, 3],
-    "Medication Name": [
-        "Medication A",
-        "Medication B",
-        "Medication C"
-    ],
-    "Description": [
-        "Sample medication",
-        "Sample medication",
-        "Sample medication"
-    ]
-})
-
-
-medication_history = pd.DataFrame({
-    "Animal": ["Bruno", "Kitty", "Rocky"],
-    "Medication": [
-        "Medication A",
-        "Medication B",
-        "Medication C"
-    ],
-    "Dose (mg/kg)": [10, 5, 8],
-    "Calculated Dose (mg)": [255, 21, 100],
-    "Frequency": [
-        "Twice daily",
-        "Once daily",
-        "Twice daily"
-    ],
-    "Duration (days)": [5, 7, 5]
-})
+def get_connection():
+    return sqlite3.connect(DATABASE_NAME)
 
 
 # ============================================================
-# TITLE
+# CREATE DATABASE TABLES
 # ============================================================
 
-st.title("🐾 Veterinary Medicine EHR")
+def create_tables():
 
-st.subheader(
-    "Animal Clinic Electronic Health Record & Medication Tracker"
-)
+    connection = get_connection()
+    cursor = connection.cursor()
 
-st.write(
-    "A sample Veterinary EHR application built with Streamlit."
-)
+    # Owners table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS owners (
+            owner_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_name TEXT NOT NULL,
+            phone TEXT,
+            email TEXT,
+            address TEXT
+        )
+    """)
+
+    # Animals table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS animals (
+            animal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_id INTEGER,
+            animal_name TEXT NOT NULL,
+            species TEXT,
+            breed TEXT,
+            gender TEXT,
+            date_of_birth TEXT,
+            weight_kg REAL,
+            FOREIGN KEY (owner_id)
+            REFERENCES owners(owner_id)
+        )
+    """)
+
+    # Visits table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS visits (
+            visit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            animal_id INTEGER,
+            visit_date TEXT,
+            symptoms TEXT,
+            diagnosis TEXT,
+            notes TEXT,
+            FOREIGN KEY (animal_id)
+            REFERENCES animals(animal_id)
+        )
+    """)
+
+    # Vaccinations table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS vaccinations (
+            vaccination_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            animal_id INTEGER,
+            vaccine_name TEXT,
+            vaccination_date TEXT,
+            next_due_date TEXT,
+            FOREIGN KEY (animal_id)
+            REFERENCES animals(animal_id)
+        )
+    """)
+
+    # Medications table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS medications (
+            medication_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            medication_name TEXT,
+            description TEXT
+        )
+    """)
+
+    # Medication history table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS animal_medications (
+            animal_medication_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            animal_id INTEGER,
+            medication_id INTEGER,
+            dosage_mg_per_kg REAL,
+            frequency TEXT,
+            duration_days INTEGER,
+            calculated_dose_mg REAL,
+            start_date TEXT,
+            FOREIGN KEY (animal_id)
+            REFERENCES animals(animal_id),
+            FOREIGN KEY (medication_id)
+            REFERENCES medications(medication_id)
+        )
+    """)
+
+    connection.commit()
+    connection.close()
+
+
+create_tables()
+
+
+# ============================================================
+# HELPER FUNCTION
+# ============================================================
+
+def load_data(query):
+
+    connection = get_connection()
+
+    dataframe = pd.read_sql_query(
+        query,
+        connection
+    )
+
+    connection.close()
+
+    return dataframe
 
 
 # ============================================================
 # SIDEBAR
 # ============================================================
 
-st.sidebar.title("🐾 Navigation")
+st.sidebar.title("🐾 Veterinary EHR")
+
+st.sidebar.write(
+    "Animal Clinic Electronic Health Record"
+)
 
 page = st.sidebar.selectbox(
-    "Select a section",
+    "Select Section",
     [
         "Dashboard",
         "Owners",
@@ -163,9 +174,38 @@ page = st.sidebar.selectbox(
 
 if page == "Dashboard":
 
-    st.header("🏠 Dashboard")
+    st.title("🐾 Veterinary Medicine EHR")
 
-    col1, col2, col3, col4 = st.columns(4)
+    st.subheader(
+        "Animal Clinic Electronic Health Record & Medication Tracker"
+    )
+
+    st.write(
+        "Manage animal owners, animals, visits, vaccinations "
+        "and medication records."
+    )
+
+    owners = load_data(
+        "SELECT * FROM owners"
+    )
+
+    animals = load_data(
+        "SELECT * FROM animals"
+    )
+
+    visits = load_data(
+        "SELECT * FROM visits"
+    )
+
+    vaccinations = load_data(
+        "SELECT * FROM vaccinations"
+    )
+
+    medications = load_data(
+        "SELECT * FROM medications"
+    )
+
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     col1.metric(
         "👤 Owners",
@@ -187,39 +227,43 @@ if page == "Dashboard":
         len(vaccinations)
     )
 
+    col5.metric(
+        "💊 Medications",
+        len(medications)
+    )
+
     st.divider()
 
-    st.subheader("🐾 Animals by Species")
+    st.subheader("📋 Recent Animals")
 
-    species_count = (
-        animals["Species"]
-        .value_counts()
-        .reset_index()
-    )
+    recent_animals = load_data("""
+        SELECT
+            a.animal_id,
+            a.animal_name,
+            a.species,
+            a.breed,
+            a.gender,
+            a.weight_kg,
+            o.owner_name
+        FROM animals a
+        LEFT JOIN owners o
+        ON a.owner_id = o.owner_id
+        ORDER BY a.animal_id DESC
+        LIMIT 10
+    """)
 
-    species_count.columns = [
-        "Species",
-        "Number of Animals"
-    ]
+    if recent_animals.empty:
 
-    fig = px.bar(
-        species_count,
-        x="Species",
-        y="Number of Animals",
-        title="Animals by Species"
-    )
+        st.info(
+            "No animals have been added yet."
+        )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+    else:
 
-    st.subheader("🩺 Recent Visits")
-
-    st.dataframe(
-        visits,
-        use_container_width=True
-    )
+        st.dataframe(
+            recent_animals,
+            use_container_width=True
+        )
 
 
 # ============================================================
@@ -228,9 +272,9 @@ if page == "Dashboard":
 
 elif page == "Owners":
 
-    st.header("👤 Owner Management")
+    st.title("👤 Owner Management")
 
-    st.subheader("➕ Add Owner")
+    st.subheader("➕ Add New Owner")
 
     with st.form("owner_form"):
 
@@ -256,26 +300,70 @@ elif page == "Owners":
 
         if submit:
 
-            if owner_name:
+            if owner_name.strip() == "":
 
-                st.success(
-                    f"✅ Owner '{owner_name}' added successfully!"
+                st.error(
+                    "Owner name is required."
                 )
 
             else:
 
-                st.warning(
-                    "Please enter owner name."
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    INSERT INTO owners
+                    (
+                        owner_name,
+                        phone,
+                        email,
+                        address
+                    )
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        owner_name,
+                        phone,
+                        email,
+                        address
+                    )
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Owner added successfully!"
                 )
 
     st.divider()
 
-    st.subheader("📋 Owner List")
+    st.subheader("📋 Owner Records")
 
-    st.dataframe(
-        owners,
-        use_container_width=True
-    )
+    owners = load_data("""
+        SELECT
+            owner_id,
+            owner_name,
+            phone,
+            email,
+            address
+        FROM owners
+        ORDER BY owner_id DESC
+    """)
+
+    if owners.empty:
+
+        st.info(
+            "No owner records found."
+        )
+
+    else:
+
+        st.dataframe(
+            owners,
+            use_container_width=True
+        )
 
 
 # ============================================================
@@ -284,71 +372,162 @@ elif page == "Owners":
 
 elif page == "Animals":
 
-    st.header("🐾 Animal Management")
+    st.title("🐾 Animal Management")
 
-    st.subheader("➕ Add Animal")
+    owners = load_data("""
+        SELECT
+            owner_id,
+            owner_name
+        FROM owners
+        ORDER BY owner_name
+    """)
 
-    with st.form("animal_form"):
+    if owners.empty:
 
-        animal_name = st.text_input(
-            "Animal Name"
+        st.warning(
+            "Please add an owner first."
         )
 
-        species = st.selectbox(
-            "Species",
-            [
-                "Dog",
-                "Cat",
-                "Rabbit",
-                "Bird",
-                "Other"
-            ]
-        )
+    else:
 
-        breed = st.text_input(
-            "Breed"
-        )
+        owner_options = {
+            f"{row.owner_name} (ID: {row.owner_id})":
+            row.owner_id
+            for row in owners.itertuples()
+        }
 
-        gender = st.selectbox(
-            "Gender",
-            [
-                "Male",
-                "Female"
-            ]
-        )
+        with st.form("animal_form"):
 
-        weight = st.number_input(
-            "Weight (kg)",
-            min_value=0.0,
-            step=0.1
-        )
+            animal_name = st.text_input(
+                "Animal Name"
+            )
 
-        submit = st.form_submit_button(
-            "Add Animal"
-        )
+            species = st.selectbox(
+                "Species",
+                [
+                    "Dog",
+                    "Cat",
+                    "Rabbit",
+                    "Bird",
+                    "Cow",
+                    "Horse",
+                    "Other"
+                ]
+            )
 
-        if submit:
+            breed = st.text_input(
+                "Breed"
+            )
 
-            if animal_name:
+            gender = st.selectbox(
+                "Gender",
+                [
+                    "Male",
+                    "Female",
+                    "Unknown"
+                ]
+            )
 
-                st.success(
-                    f"✅ {animal_name} added successfully!"
-                )
+            date_of_birth = st.date_input(
+                "Date of Birth"
+            )
 
-            else:
+            weight = st.number_input(
+                "Weight (kg)",
+                min_value=0.0,
+                step=0.1
+            )
 
-                st.warning(
-                    "Please enter animal name."
-                )
+            selected_owner = st.selectbox(
+                "Owner",
+                list(owner_options.keys())
+            )
+
+            submit = st.form_submit_button(
+                "Add Animal"
+            )
+
+            if submit:
+
+                if animal_name.strip() == "":
+
+                    st.error(
+                        "Animal name is required."
+                    )
+
+                else:
+
+                    owner_id = owner_options[
+                        selected_owner
+                    ]
+
+                    connection = get_connection()
+                    cursor = connection.cursor()
+
+                    cursor.execute(
+                        """
+                        INSERT INTO animals
+                        (
+                            owner_id,
+                            animal_name,
+                            species,
+                            breed,
+                            gender,
+                            date_of_birth,
+                            weight_kg
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            owner_id,
+                            animal_name,
+                            species,
+                            breed,
+                            gender,
+                            str(date_of_birth),
+                            weight
+                        )
+                    )
+
+                    connection.commit()
+                    connection.close()
+
+                    st.success(
+                        "✅ Animal added successfully!"
+                    )
 
     st.divider()
 
-    st.subheader("📋 Animal List")
+    st.subheader("📋 Animal Records")
 
-    st.dataframe(
-        animals,
-        use_container_width=True
-    )
+    animals = load_data("""
+        SELECT
+            a.animal_id,
+            a.animal_name,
+            a.species,
+            a.breed,
+            a.gender,
+            a.date_of_birth,
+            a.weight_kg,
+            o.owner_name
+        FROM animals a
+        LEFT JOIN owners o
+        ON a.owner_id = o.owner_id
+        ORDER BY a.animal_id DESC
+    """)
+
+    if animals.empty:
+
+        st.info(
+            "No animal records found."
+        )
+
+    else:
+
+        st.dataframe(
+            animals,
+            use_container_width=True
+        )
 
 
 # ============================================================
@@ -357,51 +536,125 @@ elif page == "Animals":
 
 elif page == "Visits":
 
-    st.header("🩺 Veterinary Visits")
+    st.title("🩺 Veterinary Visits")
 
-    st.subheader("➕ Add Veterinary Visit")
+    animals = load_data("""
+        SELECT
+            animal_id,
+            animal_name
+        FROM animals
+        ORDER BY animal_name
+    """)
 
-    with st.form("visit_form"):
+    if animals.empty:
 
-        animal = st.selectbox(
-            "Animal",
-            animals["Animal Name"].tolist()
+        st.warning(
+            "Please add an animal first."
         )
 
-        visit_date = st.date_input(
-            "Visit Date"
-        )
+    else:
 
-        symptoms = st.text_area(
-            "Symptoms"
-        )
+        animal_options = {
+            f"{row.animal_name} (ID: {row.animal_id})":
+            row.animal_id
+            for row in animals.itertuples()
+        }
 
-        diagnosis = st.text_area(
-            "Diagnosis"
-        )
+        with st.form("visit_form"):
 
-        notes = st.text_area(
-            "Notes"
-        )
-
-        submit = st.form_submit_button(
-            "Save Visit"
-        )
-
-        if submit:
-
-            st.success(
-                f"✅ Visit for {animal} saved successfully!"
+            selected_animal = st.selectbox(
+                "Animal",
+                list(animal_options.keys())
             )
+
+            visit_date = st.date_input(
+                "Visit Date",
+                value=date.today()
+            )
+
+            symptoms = st.text_area(
+                "Symptoms"
+            )
+
+            diagnosis = st.text_area(
+                "Diagnosis"
+            )
+
+            notes = st.text_area(
+                "Notes"
+            )
+
+            submit = st.form_submit_button(
+                "Save Visit"
+            )
+
+            if submit:
+
+                animal_id = animal_options[
+                    selected_animal
+                ]
+
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    INSERT INTO visits
+                    (
+                        animal_id,
+                        visit_date,
+                        symptoms,
+                        diagnosis,
+                        notes
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        animal_id,
+                        str(visit_date),
+                        symptoms,
+                        diagnosis,
+                        notes
+                    )
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Visit saved successfully!"
+                )
 
     st.divider()
 
     st.subheader("📋 Visit History")
 
-    st.dataframe(
-        visits,
-        use_container_width=True
-    )
+    visits = load_data("""
+        SELECT
+            v.visit_id,
+            a.animal_name,
+            v.visit_date,
+            v.symptoms,
+            v.diagnosis,
+            v.notes
+        FROM visits v
+        JOIN animals a
+        ON v.animal_id = a.animal_id
+        ORDER BY v.visit_id DESC
+    """)
+
+    if visits.empty:
+
+        st.info(
+            "No visit records found."
+        )
+
+    else:
+
+        st.dataframe(
+            visits,
+            use_container_width=True
+        )
 
 
 # ============================================================
@@ -410,47 +663,126 @@ elif page == "Visits":
 
 elif page == "Vaccinations":
 
-    st.header("💉 Vaccination Records")
+    st.title("💉 Vaccination Records")
 
-    st.subheader("➕ Add Vaccination")
+    animals = load_data("""
+        SELECT
+            animal_id,
+            animal_name
+        FROM animals
+        ORDER BY animal_name
+    """)
 
-    with st.form("vaccination_form"):
+    if animals.empty:
 
-        animal = st.selectbox(
-            "Animal",
-            animals["Animal Name"].tolist()
+        st.warning(
+            "Please add an animal first."
         )
 
-        vaccine = st.text_input(
-            "Vaccine Name"
-        )
+    else:
 
-        vaccination_date = st.date_input(
-            "Vaccination Date"
-        )
+        animal_options = {
+            f"{row.animal_name} (ID: {row.animal_id})":
+            row.animal_id
+            for row in animals.itertuples()
+        }
 
-        next_due_date = st.date_input(
-            "Next Due Date"
-        )
+        with st.form("vaccination_form"):
 
-        submit = st.form_submit_button(
-            "Add Vaccination"
-        )
-
-        if submit:
-
-            st.success(
-                f"✅ {vaccine} vaccination added for {animal}!"
+            selected_animal = st.selectbox(
+                "Animal",
+                list(animal_options.keys())
             )
+
+            vaccine_name = st.text_input(
+                "Vaccine Name"
+            )
+
+            vaccination_date = st.date_input(
+                "Vaccination Date",
+                value=date.today()
+            )
+
+            next_due_date = st.date_input(
+                "Next Due Date"
+            )
+
+            submit = st.form_submit_button(
+                "Add Vaccination"
+            )
+
+            if submit:
+
+                if vaccine_name.strip() == "":
+
+                    st.error(
+                        "Vaccine name is required."
+                    )
+
+                else:
+
+                    animal_id = animal_options[
+                        selected_animal
+                    ]
+
+                    connection = get_connection()
+                    cursor = connection.cursor()
+
+                    cursor.execute(
+                        """
+                        INSERT INTO vaccinations
+                        (
+                            animal_id,
+                            vaccine_name,
+                            vaccination_date,
+                            next_due_date
+                        )
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (
+                            animal_id,
+                            vaccine_name,
+                            str(vaccination_date),
+                            str(next_due_date)
+                        )
+                    )
+
+                    connection.commit()
+                    connection.close()
+
+                    st.success(
+                        "✅ Vaccination added successfully!"
+                    )
 
     st.divider()
 
     st.subheader("📋 Vaccination History")
 
-    st.dataframe(
-        vaccinations,
-        use_container_width=True
-    )
+    vaccinations = load_data("""
+        SELECT
+            v.vaccination_id,
+            a.animal_name,
+            v.vaccine_name,
+            v.vaccination_date,
+            v.next_due_date
+        FROM vaccinations v
+        JOIN animals a
+        ON v.animal_id = a.animal_id
+        ORDER BY v.next_due_date
+    """)
+
+    if vaccinations.empty:
+
+        st.info(
+            "No vaccination records found."
+        )
+
+    else:
+
+        st.dataframe(
+            vaccinations,
+            use_container_width=True
+        )
 
 
 # ============================================================
@@ -459,9 +791,7 @@ elif page == "Vaccinations":
 
 elif page == "Medications":
 
-    st.header("💊 Medication Management")
-
-    st.subheader("➕ Add Medication")
+    st.title("💊 Medication Management")
 
     with st.form("medication_form"):
 
@@ -479,26 +809,64 @@ elif page == "Medications":
 
         if submit:
 
-            if medication_name:
+            if medication_name.strip() == "":
 
-                st.success(
-                    f"✅ {medication_name} added successfully!"
+                st.error(
+                    "Medication name is required."
                 )
 
             else:
 
-                st.warning(
-                    "Please enter medication name."
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    INSERT INTO medications
+                    (
+                        medication_name,
+                        description
+                    )
+                    VALUES (?, ?)
+                    """,
+                    (
+                        medication_name,
+                        description
+                    )
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Medication added successfully!"
                 )
 
     st.divider()
 
     st.subheader("📋 Medication List")
 
-    st.dataframe(
-        medications,
-        use_container_width=True
-    )
+    medications = load_data("""
+        SELECT
+            medication_id,
+            medication_name,
+            description
+        FROM medications
+        ORDER BY medication_id DESC
+    """)
+
+    if medications.empty:
+
+        st.info(
+            "No medications found."
+        )
+
+    else:
+
+        st.dataframe(
+            medications,
+            use_container_width=True
+        )
 
 
 # ============================================================
@@ -507,12 +875,184 @@ elif page == "Medications":
 
 elif page == "Medication History":
 
-    st.header("📋 Medication History")
+    st.title("📋 Medication History")
 
-    st.dataframe(
-        medication_history,
-        use_container_width=True
-    )
+    animals = load_data("""
+        SELECT
+            animal_id,
+            animal_name
+        FROM animals
+        ORDER BY animal_name
+    """)
+
+    medications = load_data("""
+        SELECT
+            medication_id,
+            medication_name
+        FROM medications
+        ORDER BY medication_name
+    """)
+
+    if animals.empty:
+
+        st.warning(
+            "Please add an animal first."
+        )
+
+    elif medications.empty:
+
+        st.warning(
+            "Please add a medication first."
+        )
+
+    else:
+
+        animal_options = {
+            f"{row.animal_name} (ID: {row.animal_id})":
+            row.animal_id
+            for row in animals.itertuples()
+        }
+
+        medication_options = {
+            f"{row.medication_name} (ID: {row.medication_id})":
+            row.medication_id
+            for row in medications.itertuples()
+        }
+
+        with st.form("medication_history_form"):
+
+            selected_animal = st.selectbox(
+                "Animal",
+                list(animal_options.keys())
+            )
+
+            selected_medication = st.selectbox(
+                "Medication",
+                list(medication_options.keys())
+            )
+
+            dosage = st.number_input(
+                "Veterinarian-prescribed dose (mg/kg)",
+                min_value=0.0,
+                step=0.1
+            )
+
+            frequency = st.text_input(
+                "Frequency"
+            )
+
+            duration = st.number_input(
+                "Duration (days)",
+                min_value=1,
+                step=1
+            )
+
+            start_date = st.date_input(
+                "Start Date",
+                value=date.today()
+            )
+
+            submit = st.form_submit_button(
+                "Save Medication History"
+            )
+
+            if submit:
+
+                animal_id = animal_options[
+                    selected_animal
+                ]
+
+                medication_id = medication_options[
+                    selected_medication
+                ]
+
+                animal_data = animals[
+                    animals["animal_id"] == animal_id
+                ]
+
+                weight = float(
+                    animal_data.iloc[0]["weight_kg"]
+                )
+
+                calculated_dose = (
+                    weight * dosage
+                )
+
+                connection = get_connection()
+                cursor = connection.cursor()
+
+                cursor.execute(
+                    """
+                    INSERT INTO animal_medications
+                    (
+                        animal_id,
+                        medication_id,
+                        dosage_mg_per_kg,
+                        frequency,
+                        duration_days,
+                        calculated_dose_mg,
+                        start_date
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        animal_id,
+                        medication_id,
+                        dosage,
+                        frequency,
+                        duration,
+                        calculated_dose,
+                        str(start_date)
+                    )
+                )
+
+                connection.commit()
+                connection.close()
+
+                st.success(
+                    "✅ Medication history saved!"
+                )
+
+                st.info(
+                    f"Calculated dose based on the "
+                    f"entered veterinarian-prescribed dose: "
+                    f"{calculated_dose:.2f} mg"
+                )
+
+    st.divider()
+
+    st.subheader("📋 Medication History Records")
+
+    history = load_data("""
+        SELECT
+            am.animal_medication_id,
+            a.animal_name,
+            m.medication_name,
+            am.dosage_mg_per_kg,
+            am.calculated_dose_mg,
+            am.frequency,
+            am.duration_days,
+            am.start_date
+        FROM animal_medications am
+        JOIN animals a
+        ON am.animal_id = a.animal_id
+        JOIN medications m
+        ON am.medication_id = m.medication_id
+        ORDER BY am.animal_medication_id DESC
+    """)
+
+    if history.empty:
+
+        st.info(
+            "No medication history found."
+        )
+
+    else:
+
+        st.dataframe(
+            history,
+            use_container_width=True
+        )
 
 
 # ============================================================
@@ -521,10 +1061,12 @@ elif page == "Medication History":
 
 elif page == "Dose Calculator":
 
-    st.header("🧮 Medication Dose Calculator")
+    st.title("🧮 Medication Dose Calculator")
 
-    st.info(
-        "Enter only the dose prescribed by a qualified veterinarian."
+    st.warning(
+        "This calculator only calculates a dose already "
+        "prescribed by a qualified veterinarian. "
+        "It does not prescribe medication."
     )
 
     weight = st.number_input(
@@ -539,18 +1081,20 @@ elif page == "Dose Calculator":
         step=0.1
     )
 
-    if st.button("Calculate Dose"):
+    if st.button(
+        "Calculate Dose"
+    ):
 
         if weight <= 0:
 
-            st.warning(
-                "Please enter a valid weight."
+            st.error(
+                "Please enter a valid animal weight."
             )
 
         elif prescribed_dose <= 0:
 
-            st.warning(
-                "Please enter the prescribed dose."
+            st.error(
+                "Please enter the veterinarian-prescribed dose."
             )
 
         else:
@@ -560,12 +1104,8 @@ elif page == "Dose Calculator":
             )
 
             st.success(
-                f"Calculated dose: {total_dose:.2f} mg"
-            )
-
-            st.write(
-                f"Formula: {weight} kg × "
-                f"{prescribed_dose} mg/kg"
+                f"Calculated dose: "
+                f"{total_dose:.2f} mg"
             )
 
 
@@ -575,59 +1115,69 @@ elif page == "Dose Calculator":
 
 elif page == "Reports":
 
-    st.header("📊 Reports & Analytics")
+    st.title("📊 Reports & Analytics")
 
-    # Animals by species
+    animals = load_data("""
+        SELECT
+            species,
+            COUNT(*) AS total
+        FROM animals
+        GROUP BY species
+    """)
 
-    species_count = (
-        animals["Species"]
-        .value_counts()
-        .reset_index()
-    )
+    if animals.empty:
 
-    species_count.columns = [
-        "Species",
-        "Number of Animals"
-    ]
+        st.info(
+            "Add animals to generate reports."
+        )
 
-    st.subheader("🐾 Animals by Species")
+    else:
 
-    fig1 = px.pie(
-        species_count,
-        names="Species",
-        values="Number of Animals",
-        title="Animal Distribution"
-    )
+        st.subheader(
+            "🐾 Animals by Species"
+        )
 
-    st.plotly_chart(
-        fig1,
-        use_container_width=True
-    )
+        figure = px.bar(
+            animals,
+            x="species",
+            y="total",
+            title="Animals by Species"
+        )
 
-    # Animal weight
+        st.plotly_chart(
+            figure,
+            use_container_width=True
+        )
 
-    st.subheader("⚖️ Animal Weight")
+    st.divider()
 
-    fig2 = px.bar(
-        animals,
-        x="Animal Name",
-        y="Weight (kg)",
-        title="Animal Weight"
-    )
+    visits = load_data("""
+        SELECT
+            visit_date,
+            COUNT(*) AS total_visits
+        FROM visits
+        GROUP BY visit_date
+        ORDER BY visit_date
+    """)
 
-    st.plotly_chart(
-        fig2,
-        use_container_width=True
-    )
+    if not visits.empty:
 
-    # Visit information
+        st.subheader(
+            "🩺 Veterinary Visits"
+        )
 
-    st.subheader("🩺 Visit Information")
+        figure = px.line(
+            visits,
+            x="visit_date",
+            y="total_visits",
+            markers=True,
+            title="Visits Over Time"
+        )
 
-    st.dataframe(
-        visits,
-        use_container_width=True
-    )
+        st.plotly_chart(
+            figure,
+            use_container_width=True
+        )
 
 
 # ============================================================
@@ -636,10 +1186,8 @@ elif page == "Reports":
 
 st.sidebar.divider()
 
-st.sidebar.caption(
-    "🐾 Veterinary Medicine EHR"
-)
-
-st.sidebar.caption(
-    "Sample data version"
+st.sidebar.info(
+    "🐾 Veterinary Medicine EHR\n\n"
+    "SQLite Database\n\n"
+    "Built with Streamlit"
 )
